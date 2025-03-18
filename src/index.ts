@@ -4,7 +4,7 @@ import {
   placeFuturesOrder,
   FuturesOrderParams,
 } from "./utils/bybit";
-
+``;
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -13,13 +13,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Environment variables for API keys (should be set in production environment)
-const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "";
-const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET || "";
+const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "HKGx0oRYyDCoVxnhID";
+const BYBIT_API_SECRET =
+  process.env.BYBIT_API_SECRET || "zHi65DDM2zkvsrAw4EUsTLMNtUBo8Mco4xuG";
 
 // Basic route
-app.get("/", (req: Request, res: Response) => {
-  res.json({ message: "Welcome to the DemoWebhook API" });
-});
+// app.get("/", (req: Request, res: Response) => {
+//   res.json({ message: "Welcome to the DemoWebhook API" });
+// });
 
 // Webhook endpoint that triggers Bybit futures order
 app.post("/webhook", (req: Request, res: Response) => {

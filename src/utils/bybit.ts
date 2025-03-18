@@ -1,12 +1,97 @@
-import { RestClientV5 } from "bybit-api";
+import axios, { AxiosInstance } from "axios";
+import crypto from "crypto";
+
+// Interface for the Bybit client
+export interface BybitClient {
+  submitOrder: (params: any) => Promise<any>;
+}
 
 // Initialize Bybit API client
-export const initBybitClient = (apiKey: string, apiSecret: string) => {
-  return new RestClientV5({
-    key: apiKey,
-    secret: apiSecret,
-    testnet: false, // Set to true for testnet
+export const initBybitClient = (
+  apiKey: string,
+  apiSecret: string
+): BybitClient => {
+  // Create axios instance for Bybit testnet
+  const axiosInstance = axios.create({
+    baseURL: "https://api-testnet.bybit.com",
+    headers: {
+      "X-BAPI-API-KEY": apiKey,
+      "Content-Type": "application/json",
+    },
   });
+
+  // Return client object with methods
+  return {
+    submitOrder: async (params: any) => {
+      return await submitOrder(axiosInstance, apiKey, apiSecret, params);
+    },
+  };
+};
+
+// Generate signature for Bybit API authentication
+const generateSignature = (
+  apiKey: string,
+  apiSecret: string,
+  timestamp: string,
+  payload: string
+): string => {
+  return crypto
+    .createHmac("sha256", apiSecret)
+    .update(timestamp + apiKey + recvWindow + payload)
+    .digest("hex");
+};
+
+// Default recv window for API requests
+const recvWindow = "5000";
+
+// Submit order to Bybit API
+const submitOrder = async (
+  axiosInstance: AxiosInstance,
+  apiKey: string,
+  apiSecret: string,
+  params: any
+): Promise<any> => {
+  try {
+    const endpoint = "/v5/order/create";
+    const timestamp = Date.now().toString();
+
+    // Create request payload
+    const payload = JSON.stringify(params);
+
+    // Generate signature
+    const signature = generateSignature(apiKey, apiSecret, timestamp, payload);
+
+    // Make API request
+    const response = await axiosInstance.post(endpoint, payload, {
+      headers: {
+        "X-BAPI-API-KEY": apiKey,
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": recvWindow,
+        "X-BAPI-SIGN": signature,
+      },
+    });
+
+    // Return response in the same format as bybit-api
+    return {
+      retCode: response.data.retCode,
+      retMsg: response.data.retMsg,
+      result: response.data.result,
+    };
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      return {
+        retCode: error.response.data.retCode || -1,
+        retMsg: error.response.data.retMsg || error.message,
+        result: {},
+      };
+    }
+
+    return {
+      retCode: -1,
+      retMsg: error instanceof Error ? error.message : "Unknown error",
+      result: {},
+    };
+  }
 };
 
 // Interface for futures order parameters
@@ -35,7 +120,7 @@ export interface FuturesOrderParams {
  * @returns Promise with the order result
  */
 export const placeFuturesOrder = async (
-  client: RestClientV5,
+  client: BybitClient,
   params: FuturesOrderParams
 ) => {
   try {
