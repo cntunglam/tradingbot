@@ -11,18 +11,11 @@ const PORT = process.env.PORT || 3001;
 // Middleware for parsing JSON and urlencoded form data
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use(express.text());
 // Environment variables for API keys (should be set in production environment)
-const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "HKGx0oRYyDCoVxnhID";
+const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "5eOiL3UHTvzMNZIeJk";
 const BYBIT_API_SECRET =
-  process.env.BYBIT_API_SECRET || "zHi65DDM2zkvsrAw4EUsTLMNtUBo8Mco4xuG";
-
-// Basic route
-// app.get("/", (req: Request, res: Response) => {
-//   res.json({ message: "Welcome to the DemoWebhook API" });
-// });
-
-// Webhook endpoint that triggers Bybit futures order
+  process.env.BYBIT_API_SECRET || "eKeWOdh5nAoDA5HGz4JcmbHdI1sPJQANxxg6";
 app.post("/webhook", (req: Request, res: Response) => {
   console.log("Received webhook payload:", req.body);
 

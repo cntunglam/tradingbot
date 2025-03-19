@@ -13,7 +13,7 @@ export const initBybitClient = (
 ): BybitClient => {
   // Create axios instance for Bybit testnet
   const axiosInstance = axios.create({
-    baseURL: "https://api-testnet.bybit.com",
+    baseURL: "https://api-demo.bybit.com",
     headers: {
       "X-BAPI-API-KEY": apiKey,
       "Content-Type": "application/json",
