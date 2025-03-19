@@ -2,9 +2,9 @@ import express, { Request, Response } from "express";
 import {
   initBybitClient,
   placeFuturesOrder,
+  parseOrderString,
   FuturesOrderParams,
 } from "./utils/bybit";
-``;
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -41,36 +41,93 @@ app.post("/webhook", (req: Request, res: Response) => {
         });
       }
 
-      // Extract order parameters from the webhook payload
-      const {
-        symbol,
-        side,
-        orderType,
-        qty,
-        price,
-        timeInForce,
-        positionIdx,
-        reduceOnly,
-        closeOnTrigger,
-        takeProfit,
-        stopLoss,
-        tpTriggerBy,
-        slTriggerBy,
-        orderLinkId,
-      } = req.body;
+      let orderParams: FuturesOrderParams;
 
-      // Validate required parameters
-      if (!symbol || !side || !orderType || !qty) {
-        console.error("Missing required parameters in webhook payload");
+      // Check if the request body is a string (comma-separated values) or an object (JSON)
+      if (typeof req.body === "string" || req.body.orderString) {
+        const orderString = req.body.orderString || req.body;
+        console.log("Received order string:", orderString);
+
+        // Parse the comma-separated string into order parameters
+        orderParams = parseOrderString(orderString);
+
+        console.log("Parsed order parameters:", orderParams);
+      } else {
+        // Extract order parameters from the webhook payload (JSON format)
+        const {
+          symbol,
+          side,
+          orderType,
+          qty,
+          price,
+          timeInForce,
+          positionIdx,
+          reduceOnly,
+          closeOnTrigger,
+          takeProfit,
+          stopLoss,
+          tpTriggerBy,
+          slTriggerBy,
+          orderLinkId,
+        } = req.body;
+
+        // Validate required parameters
+        if (!symbol || !side || !orderType || !qty) {
+          console.error("Missing required parameters in webhook payload");
+          return res.status(400).json({
+            success: false,
+            error:
+              "Missing required parameters. Please provide symbol, side, orderType, and qty.",
+          });
+        }
+
+        // Validate order type and price
+        if (orderType === "Limit" && !price) {
+          console.error("Price is required for Limit orders");
+          return res.status(400).json({
+            success: false,
+            error: "Price is required for Limit orders.",
+          });
+        }
+
+        // Prepare order parameters
+        orderParams = {
+          symbol,
+          side,
+          orderType,
+          qty,
+        };
+
+        // Add optional parameters if provided
+        if (price) orderParams.price = price;
+        if (timeInForce) orderParams.timeInForce = timeInForce;
+        if (positionIdx !== undefined) orderParams.positionIdx = positionIdx;
+        if (reduceOnly !== undefined) orderParams.reduceOnly = reduceOnly;
+        if (closeOnTrigger !== undefined)
+          orderParams.closeOnTrigger = closeOnTrigger;
+        if (takeProfit) orderParams.takeProfit = takeProfit;
+        if (stopLoss) orderParams.stopLoss = stopLoss;
+        if (tpTriggerBy) orderParams.tpTriggerBy = tpTriggerBy;
+        if (slTriggerBy) orderParams.slTriggerBy = slTriggerBy;
+        if (orderLinkId) orderParams.orderLinkId = orderLinkId;
+      }
+
+      // Validate the required parameters are present after parsing
+      if (
+        !orderParams.symbol ||
+        !orderParams.side ||
+        !orderParams.orderType ||
+        !orderParams.qty
+      ) {
+        console.error("Missing required parameters after parsing");
         return res.status(400).json({
           success: false,
-          error:
-            "Missing required parameters. Please provide symbol, side, orderType, and qty.",
+          error: "Missing required parameters after parsing the input.",
         });
       }
 
-      // Validate order type and price
-      if (orderType === "Limit" && !price) {
+      // Validate order type and price for parsed parameters
+      if (orderParams.orderType === "Limit" && !orderParams.price) {
         console.error("Price is required for Limit orders");
         return res.status(400).json({
           success: false,
@@ -78,32 +135,13 @@ app.post("/webhook", (req: Request, res: Response) => {
         });
       }
 
-      // Prepare order parameters
-      const orderParams: FuturesOrderParams = {
-        symbol,
-        side,
-        orderType,
-        qty,
-      };
-
-      // Add optional parameters if provided
-      if (price) orderParams.price = price;
-      if (timeInForce) orderParams.timeInForce = timeInForce;
-      if (positionIdx !== undefined) orderParams.positionIdx = positionIdx;
-      if (reduceOnly !== undefined) orderParams.reduceOnly = reduceOnly;
-      if (closeOnTrigger !== undefined)
-        orderParams.closeOnTrigger = closeOnTrigger;
-      if (takeProfit) orderParams.takeProfit = takeProfit;
-      if (stopLoss) orderParams.stopLoss = stopLoss;
-      if (tpTriggerBy) orderParams.tpTriggerBy = tpTriggerBy;
-      if (slTriggerBy) orderParams.slTriggerBy = slTriggerBy;
-      if (orderLinkId) orderParams.orderLinkId = orderLinkId;
-
       // Initialize Bybit client
       const client = initBybitClient(BYBIT_API_KEY, BYBIT_API_SECRET);
 
       // Place the order
-      console.log(`Placing ${orderType} order for ${symbol}...`);
+      console.log(
+        `Placing ${orderParams.orderType} order for ${orderParams.symbol}...`
+      );
       const orderResult = await placeFuturesOrder(client, orderParams);
 
       // Log and return the result

@@ -94,6 +94,43 @@ const submitOrder = async (
   }
 };
 
+/**
+ * Convert a comma-separated string to a JSON object for Bybit API
+ * Expected format: "symbol,side,orderType,qty,price,timeInForce,..."
+ *
+ * @param csvString - Comma-separated string with order parameters
+ * @returns FuturesOrderParams object
+ */
+export const parseOrderString = (csvString: string): FuturesOrderParams => {
+  // Split the string by commas
+  const parts = csvString.split(",").map((part) => part.trim());
+
+  // Create the base order parameters
+  const orderParams: FuturesOrderParams = {
+    symbol: parts[0] || "",
+    side: (parts[1] as "Buy" | "Sell") || "Buy",
+    orderType: (parts[2] as "Market" | "Limit") || "Market",
+    qty: parts[3] || "0",
+  };
+
+  // Add optional parameters if provided
+  if (parts[4] && parts[4] !== "") orderParams.price = parts[4];
+  if (parts[5] && parts[5] !== "") orderParams.timeInForce = parts[5];
+  if (parts[6] && parts[6] !== "")
+    orderParams.positionIdx = parseInt(parts[6], 10);
+  if (parts[7] && parts[7] !== "")
+    orderParams.reduceOnly = parts[7].toLowerCase() === "true";
+  if (parts[8] && parts[8] !== "")
+    orderParams.closeOnTrigger = parts[8].toLowerCase() === "true";
+  if (parts[9] && parts[9] !== "") orderParams.takeProfit = parts[9];
+  if (parts[10] && parts[10] !== "") orderParams.stopLoss = parts[10];
+  if (parts[11] && parts[11] !== "") orderParams.tpTriggerBy = parts[11];
+  if (parts[12] && parts[12] !== "") orderParams.slTriggerBy = parts[12];
+  if (parts[13] && parts[13] !== "") orderParams.orderLinkId = parts[13];
+
+  return orderParams;
+};
+
 // Interface for futures order parameters
 export interface FuturesOrderParams {
   symbol: string; // Trading pair symbol (e.g., 'BTCUSDT')

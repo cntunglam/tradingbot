@@ -12,16 +12,23 @@ import axios from "axios";
 // Webhook endpoint (adjust if your server is running on a different port)
 const WEBHOOK_URL = "http://localhost:3001/webhook";
 
-// Example market order parameters
-const marketOrderExample = {
+// Example 1: Market order using comma-separated string
+// Format: symbol,side,orderType,qty,price,timeInForce,positionIdx,reduceOnly,closeOnTrigger,takeProfit,stopLoss,tpTriggerBy,slTriggerBy,orderLinkId
+const marketOrderString = "BTCUSDT,Buy,Market,0.001";
+
+// Example 2: Limit order using comma-separated string
+const limitOrderString = "BTCUSDT,Buy,Limit,0.001,30000,GTC";
+
+// Example 3: Market order using JSON format
+const marketOrderJson = {
   symbol: "BTCUSDT",
   side: "Buy",
   orderType: "Market",
   qty: "0.001", // Minimum quantity for BTC
 };
 
-// Example limit order parameters
-const limitOrderExample = {
+// Example 4: Limit order using JSON format
+const limitOrderJson = {
   symbol: "BTCUSDT",
   side: "Buy",
   orderType: "Limit",
@@ -35,9 +42,14 @@ const limitOrderExample = {
  */
 async function triggerWebhook(orderParams: any) {
   try {
-    console.log(
-      `Triggering webhook to place ${orderParams.orderType} order for ${orderParams.symbol}...`
-    );
+    // Log based on input type
+    if (typeof orderParams === "string") {
+      console.log("Triggering webhook with order string:", orderParams);
+    } else {
+      console.log(
+        `Triggering webhook to place ${orderParams.orderType} order for ${orderParams.symbol}...`
+      );
+    }
 
     const response = await axios.post(WEBHOOK_URL, orderParams);
 
@@ -60,11 +72,21 @@ async function main() {
   try {
     // Uncomment one of these examples to test
 
-    // Example 1: Trigger webhook with market order
-    await triggerWebhook(marketOrderExample);
+    // Example 1: Trigger webhook with market order (string format)
+    console.log("\nExample 1: Market order using string format");
+    await triggerWebhook(marketOrderString);
 
-    // Example 2: Trigger webhook with limit order
-    // await triggerWebhook(limitOrderExample);
+    // Example 2: Trigger webhook with limit order (string format)
+    // console.log("\nExample 2: Limit order using string format");
+    // await triggerWebhook(limitOrderString);
+
+    // Example 3: Trigger webhook with market order (JSON format)
+    // console.log("\nExample 3: Market order using JSON format");
+    // await triggerWebhook(marketOrderJson);
+
+    // Example 4: Trigger webhook with limit order (JSON format)
+    // console.log("\nExample 4: Limit order using JSON format");
+    // await triggerWebhook(limitOrderJson);
 
     console.log("Example completed successfully");
   } catch (error) {
