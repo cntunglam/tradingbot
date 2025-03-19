@@ -36,13 +36,19 @@ app.post("/webhook", (req: Request, res: Response) => {
 
       let orderParams: FuturesOrderParams;
 
-      // Check if the request body is a string (comma-separated values) or an object (JSON)
-      if (typeof req.body === "string" || req.body.orderString) {
-        const orderString = req.body.orderString || req.body;
+      // Handle string input (either from text/plain or orderString field)
+      if (
+        req.headers["content-type"]?.includes("text/plain") ||
+        typeof req.body === "string" ||
+        req.body.orderString
+      ) {
+        const orderString = req.headers["content-type"]?.includes("text/plain")
+          ? req.body
+          : req.body.orderString || req.body;
         console.log("Received order string:", orderString);
 
         // Parse the comma-separated string into order parameters
-        orderParams = parseOrderString(orderString);
+        orderParams = parseOrderString(orderString as string);
 
         console.log("Parsed order parameters:", orderParams);
       } else {
