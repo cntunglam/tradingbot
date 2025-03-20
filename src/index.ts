@@ -5,7 +5,7 @@ import {
   parseOrderString,
   FuturesOrderParams,
 } from "./utils/bybit";
-import "dotenv";
+import "dotenv/config";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
