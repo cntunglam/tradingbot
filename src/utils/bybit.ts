@@ -9,11 +9,12 @@ export interface BybitClient {
 // Initialize Bybit API client
 export const initBybitClient = (
   apiKey: string,
-  apiSecret: string
+  apiSecret: string,
+  baseUrl: string
 ): BybitClient => {
   // Create axios instance for Bybit testnet
   const axiosInstance = axios.create({
-    baseURL: "https://api-demo.bybit.com",
+    baseURL: baseUrl,
     headers: {
       "X-BAPI-API-KEY": apiKey,
       "Content-Type": "application/json",
