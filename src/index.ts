@@ -5,6 +5,7 @@ import {
   parseOrderString,
   FuturesOrderParams,
 } from "./utils/bybit";
+import "dotenv/config";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -13,15 +14,22 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
 // Environment variables for API keys (should be set in production environment)
-const BYBIT_API_KEY = process.env.BYBIT_API_KEY || "5eOiL3UHTvzMNZIeJk";
-const BYBIT_API_SECRET =
-  process.env.BYBIT_API_SECRET || "eKeWOdh5nAoDA5HGz4JcmbHdI1sPJQANxxg6";
+const BYBIT_API_KEY = process.env.BYBIT_API_KEY;
+const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET;
+const BASE_URL = process.env.BASE_URL;
 app.post("/webhook", (req: Request, res: Response) => {
   console.log("Received webhook payload:", req.body);
 
   // Process the webhook and place a Bybit futures order
   (async () => {
     try {
+      if (!BASE_URL) {
+        console.error("BASE URL not configured");
+        return res.status(500).json({
+          success: false,
+          error: "BASE URL not configured",
+        });
+      }
       // Check if API keys are configured
       if (!BYBIT_API_KEY || !BYBIT_API_SECRET) {
         console.error(
@@ -135,7 +143,7 @@ app.post("/webhook", (req: Request, res: Response) => {
       }
 
       // Initialize Bybit client
-      const client = initBybitClient(BYBIT_API_KEY, BYBIT_API_SECRET);
+      const client = initBybitClient(BYBIT_API_KEY, BYBIT_API_SECRET, BASE_URL);
 
       // Place the order
       console.log(

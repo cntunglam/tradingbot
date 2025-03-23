@@ -3,32 +3,79 @@ import crypto from "crypto";
 
 // Interface for the Bybit client
 export interface BybitClient {
+  axiosInstance: AxiosInstance;
+  apiKey: string;
+  apiSecret: string;
   submitOrder: (params: any) => Promise<any>;
+  getPositionData: (params: { symbol: string }) => Promise<{
+    entryPrice: string;
+    markPrice: string;
+    size: string;
+    leverage: string;
+  }>;
 }
 
 // Initialize Bybit API client
 export const initBybitClient = (
   apiKey: string,
-  apiSecret: string
+  apiSecret: string,
+  baseUrl: string
 ): BybitClient => {
   // Create axios instance for Bybit testnet
   const axiosInstance = axios.create({
-    baseURL: "https://api-demo.bybit.com",
+    baseURL: baseUrl,
     headers: {
       "X-BAPI-API-KEY": apiKey,
       "Content-Type": "application/json",
     },
   });
 
-  // Return client object with methods
+  // Return client object with properties and methods
   return {
+    axiosInstance,
+    apiKey,
+    apiSecret,
     submitOrder: async (params: any) => {
       return await submitOrder(axiosInstance, apiKey, apiSecret, params);
+    },
+    getPositionData: async (params: { symbol: string }) => {
+      const response = await getPositionInfo(axiosInstance, apiKey, apiSecret, {
+        category: "linear",
+        symbol: params.symbol,
+      });
+
+      if (response.retCode !== 0) {
+        throw new Error(response.retMsg || "Failed to get position data");
+      }
+
+      const position = response.result.list.find(
+        (p: any) => p.symbol === params.symbol
+      );
+      if (!position) {
+        throw new Error("No position found for symbol");
+      }
+
+      return {
+        entryPrice: position.avgPrice,
+        markPrice: position.markPrice,
+        size: position.size,
+        leverage: position.leverage,
+      };
     },
   };
 };
 
 // Generate signature for Bybit API authentication
+// Helper to create properly sorted query string
+const getQueryString = (params: any): string => {
+  return Object.keys(params)
+    .sort()
+    .map(
+      (key) => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`
+    )
+    .join("&");
+};
+
 const generateSignature = (
   apiKey: string,
   apiSecret: string,
@@ -44,32 +91,47 @@ const generateSignature = (
 // Default recv window for API requests
 const recvWindow = "5000";
 
-// Submit order to Bybit API
-const submitOrder = async (
+// Generic API request handler
+const handleApiRequest = async (
   axiosInstance: AxiosInstance,
   apiKey: string,
   apiSecret: string,
+  endpoint: string,
+  method: "GET" | "POST",
   params: any
 ): Promise<any> => {
   try {
-    const endpoint = "/v5/order/create";
     const timestamp = Date.now().toString();
+    let payload: string;
+    let queryString = "";
 
-    // Create request payload
-    const payload = JSON.stringify(params);
+    if (method === "POST") {
+      payload = JSON.stringify(params);
+    } else {
+      queryString = getQueryString(params);
+      payload = queryString;
+    }
 
-    // Generate signature
     const signature = generateSignature(apiKey, apiSecret, timestamp, payload);
 
-    // Make API request
-    const response = await axiosInstance.post(endpoint, payload, {
+    const requestConfig = {
       headers: {
         "X-BAPI-API-KEY": apiKey,
         "X-BAPI-TIMESTAMP": timestamp,
         "X-BAPI-RECV-WINDOW": recvWindow,
         "X-BAPI-SIGN": signature,
       },
-    });
+    };
+
+    let response;
+    if (method === "POST") {
+      response = await axiosInstance.post(endpoint, payload, requestConfig);
+    } else {
+      response = await axiosInstance.get(
+        `${endpoint}?${queryString}`,
+        requestConfig
+      );
+    }
 
     // Return response in the same format as bybit-api
     return {
@@ -94,6 +156,67 @@ const submitOrder = async (
   }
 };
 
+// Submit order to Bybit API
+const submitOrder = async (
+  axiosInstance: AxiosInstance,
+  apiKey: string,
+  apiSecret: string,
+  params: any
+): Promise<any> => {
+  return handleApiRequest(
+    axiosInstance,
+    apiKey,
+    apiSecret,
+    "/v5/order/create",
+    "POST",
+    params
+  );
+};
+
+export const getPositionInfo = async (
+  axiosInstance: AxiosInstance,
+  apiKey: string,
+  apiSecret: string,
+  params: any
+): Promise<any> => {
+  try {
+    const endpoint = "/v5/position/list";
+    const timestamp = Date.now().toString();
+    // For GET requests, create sorted/encoded query string
+    const queryString = getQueryString(params);
+    const signature = generateSignature(
+      apiKey,
+      apiSecret,
+      timestamp,
+      queryString
+    );
+
+    const response = await axiosInstance.get(`${endpoint}?${queryString}`, {
+      headers: {
+        "X-BAPI-API-KEY": apiKey,
+        "X-BAPI-TIMESTAMP": timestamp,
+        "X-BAPI-RECV-WINDOW": recvWindow,
+        "X-BAPI-SIGN": signature,
+      },
+    });
+
+    return response.data;
+  } catch (error) {
+    if (axios.isAxiosError(error) && error.response) {
+      return {
+        retCode: error.response.data.retCode || -1,
+        retMsg: error.response.data.retMsg || error.message,
+        result: {},
+      };
+    }
+    return {
+      retCode: -1,
+      retMsg: error instanceof Error ? error.message : "Unknown error",
+      result: {},
+    };
+  }
+};
+
 /**
  * Convert a comma-separated string to a JSON object for Bybit API
  * Expected format: "symbol,side,orderType,qty,price,timeInForce,..."
@@ -102,7 +225,7 @@ const submitOrder = async (
  * @returns FuturesOrderParams object
  */
 export const parseOrderString = (csvString: string): FuturesOrderParams => {
-  // Split the string by commas
+  // Split the string by comamas
   const parts = csvString.split(",").map((part) => part.trim());
 
   // Create the base order parameters
@@ -156,10 +279,63 @@ export interface FuturesOrderParams {
  * @param params - Order parameters
  * @returns Promise with the order result
  */
+// Cancel opposite side orders for same symbol
+const cancelOppositeOrders = async (
+  client: BybitClient,
+  symbol: string,
+  newOrderSide: "Buy" | "Sell"
+): Promise<void> => {
+  try {
+    // Get all open orders for the symbol
+    const response = await handleApiRequest(
+      client.axiosInstance,
+      client.apiKey,
+      client.apiSecret,
+      "/v5/order/realtime",
+      "GET",
+      {
+        category: "linear",
+        symbol: symbol,
+        openOnly: 1, // Only get open orders
+      }
+    );
+
+    if (response.retCode !== 0) {
+      throw new Error(response.retMsg || "Failed to fetch open orders");
+    }
+
+    // Filter orders with opposite side
+    const oppositeOrders = response.result.list.filter(
+      (order: any) => order.side === (newOrderSide === "Buy" ? "Sell" : "Buy")
+    );
+
+    // Cancel all opposite orders
+    for (const order of oppositeOrders) {
+      await handleApiRequest(
+        client.axiosInstance,
+        client.apiKey,
+        client.apiSecret,
+        "/v5/order/cancel",
+        "POST",
+        {
+          category: "linear",
+          symbol: order.symbol,
+          orderId: order.orderId,
+        }
+      );
+    }
+  } catch (error) {
+    console.error("Error canceling opposite orders:", error);
+    throw error;
+  }
+};
+
 export const placeFuturesOrder = async (
   client: BybitClient,
   params: FuturesOrderParams
 ) => {
+  // Cancel existing opposite orders first
+  await cancelOppositeOrders(client, params.symbol, params.side);
   try {
     // Prepare order parameters
     const orderParams: any = {
@@ -170,6 +346,10 @@ export const placeFuturesOrder = async (
       qty: params.qty,
     };
 
+    // Get position data for TP/SL calculation
+    const positionData = await client.getPositionData({
+      symbol: params.symbol,
+    });
     // Add optional parameters if provided
     if (params.price && params.orderType === "Limit") {
       orderParams.price = params.price;
@@ -178,7 +358,6 @@ export const placeFuturesOrder = async (
     if (params.timeInForce) {
       orderParams.timeInForce = params.timeInForce;
     } else if (params.orderType === "Limit") {
-      // Default time in force for limit orders
       orderParams.timeInForce = "GTC"; // Good Till Cancelled
     }
 
@@ -194,12 +373,24 @@ export const placeFuturesOrder = async (
       orderParams.closeOnTrigger = params.closeOnTrigger;
     }
 
+    // Take Profit calculation using position data
     if (params.takeProfit) {
-      orderParams.takeProfit = params.takeProfit;
+      const entryPrice = parseFloat(positionData.entryPrice);
+      const tpPercent = Number(params.takeProfit) / 100;
+      orderParams.takeProfit =
+        params.side === "Buy"
+          ? (entryPrice * (1 + tpPercent)).toFixed(2)
+          : (entryPrice * (1 - tpPercent)).toFixed(2);
     }
 
+    // Stop Loss calculation using position data
     if (params.stopLoss) {
-      orderParams.stopLoss = params.stopLoss;
+      const entryPrice = parseFloat(positionData.entryPrice);
+      const slPercent = Number(params.stopLoss) / 100;
+      orderParams.stopLoss =
+        params.side === "Buy"
+          ? (entryPrice * (1 - slPercent)).toFixed(2)
+          : (entryPrice * (1 + slPercent)).toFixed(2);
     }
 
     if (params.tpTriggerBy) {
@@ -239,3 +430,8 @@ export const placeFuturesOrder = async (
     };
   }
 };
+
+// curl -X POST "http://localhost:3001/get-price" \
+// -H "Content-Type: text/plain" \
+// -d ""BTCUSDT,Buy,Market,0.1,,,0,false,false,5,5,,,"
+// "
