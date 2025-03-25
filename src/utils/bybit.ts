@@ -334,8 +334,6 @@ export const placeFuturesOrder = async (
   client: BybitClient,
   params: FuturesOrderParams
 ) => {
-  // Cancel existing opposite orders first
-  await cancelOppositeOrders(client, params.symbol, params.side);
   try {
     // Prepare order parameters
     const orderParams: any = {
@@ -350,6 +348,7 @@ export const placeFuturesOrder = async (
     const positionData = await client.getPositionData({
       symbol: params.symbol,
     });
+    console.log(positionData);
     // Add optional parameters if provided
     if (params.price && params.orderType === "Limit") {
       orderParams.price = params.price;
@@ -377,20 +376,24 @@ export const placeFuturesOrder = async (
     if (params.takeProfit) {
       const entryPrice = parseFloat(positionData.entryPrice);
       const tpPercent = Number(params.takeProfit) / 100;
-      orderParams.takeProfit =
-        params.side === "Buy"
-          ? (entryPrice * (1 + tpPercent)).toFixed(2)
-          : (entryPrice * (1 - tpPercent)).toFixed(2);
+      if (entryPrice > 0) {
+        orderParams.takeProfit =
+          params.side === "Buy"
+            ? (entryPrice * (1 + tpPercent)).toFixed(2)
+            : (entryPrice * (1 - tpPercent)).toFixed(2);
+      }
     }
 
     // Stop Loss calculation using position data
     if (params.stopLoss) {
       const entryPrice = parseFloat(positionData.entryPrice);
       const slPercent = Number(params.stopLoss) / 100;
-      orderParams.stopLoss =
-        params.side === "Buy"
-          ? (entryPrice * (1 - slPercent)).toFixed(2)
-          : (entryPrice * (1 + slPercent)).toFixed(2);
+      if (entryPrice > 0) {
+        orderParams.stopLoss =
+          params.side === "Buy"
+            ? (entryPrice * (1 - slPercent)).toFixed(2)
+            : (entryPrice * (1 + slPercent)).toFixed(2);
+      }
     }
 
     if (params.tpTriggerBy) {
@@ -404,7 +407,7 @@ export const placeFuturesOrder = async (
     if (params.orderLinkId) {
       orderParams.orderLinkId = params.orderLinkId;
     }
-
+    console.log(orderParams);
     // Submit the order
     const response = await client.submitOrder(orderParams);
 
@@ -428,10 +431,8 @@ export const placeFuturesOrder = async (
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",
     };
+  } finally {
+    // Cancel existing opposite orders first
+    await cancelOppositeOrders(client, params.symbol, params.side);
   }
 };
-
-// curl -X POST "http://localhost:3001/get-price" \
-// -H "Content-Type: text/plain" \
-// -d ""BTCUSDT,Buy,Market,0.1,,,0,false,false,5,5,,,"
-// "
