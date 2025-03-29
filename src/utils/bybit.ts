@@ -13,6 +13,13 @@ export interface BybitClient {
     size: string;
     leverage: string;
   } | null>;
+  getMarketData: (params: { symbol: string; category: string }) => Promise<{
+    lastPrice: string;
+    highPrice: string;
+    lowPrice: string;
+    volume: string;
+    fundingRate: string;
+  } | null>;
 }
 
 // Initialize Bybit API client
@@ -60,6 +67,37 @@ export const initBybitClient = (
         markPrice: position.markPrice,
         size: position.size,
         leverage: position.leverage,
+      };
+    },
+
+    getMarketData: async (params: { symbol: string; category: string }) => {
+      const response = await getMarketTickers(
+        axiosInstance,
+        apiKey,
+        apiSecret,
+        {
+          category: "linear",
+          symbol: params.symbol,
+        }
+      );
+
+      if (response.retCode !== 0) {
+        throw new Error(response.retMsg || "Failed to get market data");
+      }
+
+      const ticker = response.result.list.find(
+        (t: any) => t.symbol === params.symbol
+      );
+      if (!ticker) {
+        throw new Error("No market data found for symbol");
+      }
+
+      return {
+        lastPrice: ticker.lastPrice,
+        highPrice: ticker.highPrice24h,
+        lowPrice: ticker.lowPrice24h,
+        volume: ticker.volume24h,
+        fundingRate: ticker.fundingRate,
       };
     },
   };
@@ -170,6 +208,22 @@ const submitOrder = async (
     "/v5/order/create",
     "POST",
     params
+  );
+};
+
+export const getMarketTickers = async (
+  axiosInstance: AxiosInstance,
+  apiKey: string,
+  apiSecret: string,
+  params: any
+): Promise<any> => {
+  return handleApiRequest(
+    axiosInstance,
+    apiKey,
+    apiSecret,
+    "/v5/market/tickers",
+    "GET",
+    { category: "linear", symbol: params.symbol }
   );
 };
 
@@ -352,6 +406,10 @@ export const placeFuturesOrder = async (
       category: "linear",
       symbol: params.symbol,
     });
+    const marketData = await client.getMarketData({
+      category: "linear",
+      symbol: params.symbol,
+    });
     console.log(positionData);
     // Add optional parameters if provided
     if (params.price && params.orderType === "Limit") {
@@ -377,9 +435,9 @@ export const placeFuturesOrder = async (
     }
 
     // Take Profit calculation using position data
-    if (positionData && params.takeProfit) {
+    if (positionData && marketData && params.takeProfit) {
       const entryPrice = parseFloat(positionData.entryPrice);
-      const markPrice = parseFloat(positionData.markPrice);
+      const markPrice = parseFloat(marketData?.lastPrice);
       const tpPercent = Number(params.takeProfit) / 100;
       if (entryPrice > 0) {
         orderParams.takeProfit =
@@ -395,9 +453,9 @@ export const placeFuturesOrder = async (
     }
 
     // Stop Loss calculation using position data
-    if (positionData && params.stopLoss) {
+    if (positionData && marketData && params.stopLoss) {
       const entryPrice = parseFloat(positionData.entryPrice);
-      const markPrice = parseFloat(positionData.markPrice);
+      const markPrice = parseFloat(marketData?.lastPrice);
       const slPercent = Number(params.stopLoss) / 100;
       if (entryPrice > 0) {
         orderParams.stopLoss =
