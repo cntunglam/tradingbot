@@ -411,6 +411,7 @@ export const placeFuturesOrder = async (
       symbol: params.symbol,
     });
     console.log(positionData);
+    console.log(marketData);
     // Add optional parameters if provided
     if (params.price && params.orderType === "Limit") {
       orderParams.price = params.price;
