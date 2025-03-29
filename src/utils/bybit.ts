@@ -7,12 +7,12 @@ export interface BybitClient {
   apiKey: string;
   apiSecret: string;
   submitOrder: (params: any) => Promise<any>;
-  getPositionData: (params: { symbol: string }) => Promise<{
+  getPositionData: (params: { symbol: string; category: string }) => Promise<{
     entryPrice: string;
     markPrice: string;
     size: string;
     leverage: string;
-  }>;
+  } | null>;
 }
 
 // Initialize Bybit API client
@@ -38,7 +38,7 @@ export const initBybitClient = (
     submitOrder: async (params: any) => {
       return await submitOrder(axiosInstance, apiKey, apiSecret, params);
     },
-    getPositionData: async (params: { symbol: string }) => {
+    getPositionData: async (params: { symbol: string; category: string }) => {
       const response = await getPositionInfo(axiosInstance, apiKey, apiSecret, {
         category: "linear",
         symbol: params.symbol,
@@ -180,7 +180,7 @@ export const getPositionInfo = async (
   params: any
 ): Promise<any> => {
   try {
-    const endpoint = "/v5/position/list";
+    const endpointPosition = "/v5/position/list";
     const timestamp = Date.now().toString();
     // For GET requests, create sorted/encoded query string
     const queryString = getQueryString(params);
@@ -191,14 +191,17 @@ export const getPositionInfo = async (
       queryString
     );
 
-    const response = await axiosInstance.get(`${endpoint}?${queryString}`, {
-      headers: {
-        "X-BAPI-API-KEY": apiKey,
-        "X-BAPI-TIMESTAMP": timestamp,
-        "X-BAPI-RECV-WINDOW": recvWindow,
-        "X-BAPI-SIGN": signature,
-      },
-    });
+    const response = await axiosInstance.get(
+      `${endpointPosition}?${queryString}`,
+      {
+        headers: {
+          "X-BAPI-API-KEY": apiKey,
+          "X-BAPI-TIMESTAMP": timestamp,
+          "X-BAPI-RECV-WINDOW": recvWindow,
+          "X-BAPI-SIGN": signature,
+        },
+      }
+    );
 
     return response.data;
   } catch (error) {
@@ -346,6 +349,7 @@ export const placeFuturesOrder = async (
 
     // Get position data for TP/SL calculation
     const positionData = await client.getPositionData({
+      category: "linear",
       symbol: params.symbol,
     });
     console.log(positionData);
@@ -373,26 +377,38 @@ export const placeFuturesOrder = async (
     }
 
     // Take Profit calculation using position data
-    if (params.takeProfit) {
+    if (positionData && params.takeProfit) {
       const entryPrice = parseFloat(positionData.entryPrice);
+      const markPrice = parseFloat(positionData.markPrice);
       const tpPercent = Number(params.takeProfit) / 100;
       if (entryPrice > 0) {
         orderParams.takeProfit =
           params.side === "Buy"
             ? (entryPrice * (1 + tpPercent)).toFixed(2)
             : (entryPrice * (1 - tpPercent)).toFixed(2);
+      } else {
+        orderParams.takeProfit =
+          params.side === "Buy"
+            ? (markPrice * (1 + tpPercent)).toFixed(2)
+            : (markPrice * (1 - tpPercent)).toFixed(2);
       }
     }
 
     // Stop Loss calculation using position data
-    if (params.stopLoss) {
+    if (positionData && params.stopLoss) {
       const entryPrice = parseFloat(positionData.entryPrice);
+      const markPrice = parseFloat(positionData.markPrice);
       const slPercent = Number(params.stopLoss) / 100;
       if (entryPrice > 0) {
         orderParams.stopLoss =
           params.side === "Buy"
             ? (entryPrice * (1 - slPercent)).toFixed(2)
             : (entryPrice * (1 + slPercent)).toFixed(2);
+      } else {
+        orderParams.stopLoss =
+          params.side === "Buy"
+            ? (markPrice * (1 - slPercent)).toFixed(2)
+            : (markPrice * (1 + slPercent)).toFixed(2);
       }
     }
 
