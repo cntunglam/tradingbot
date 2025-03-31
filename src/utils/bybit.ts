@@ -443,13 +443,13 @@ export const placeFuturesOrder = async (
       if (entryPrice > 0) {
         orderParams.takeProfit =
           params.side === "Buy"
-            ? (entryPrice * (1 + tpPercent)).toFixed(2)
-            : (entryPrice * (1 - tpPercent)).toFixed(2);
+            ? (entryPrice * (1 + tpPercent)).toFixed(5)
+            : (entryPrice * (1 - tpPercent)).toFixed(5);
       } else {
         orderParams.takeProfit =
           params.side === "Buy"
-            ? (markPrice * (1 + tpPercent)).toFixed(2)
-            : (markPrice * (1 - tpPercent)).toFixed(2);
+            ? (markPrice * (1 + tpPercent)).toFixed(5)
+            : (markPrice * (1 - tpPercent)).toFixed(5);
       }
     }
 
@@ -461,13 +461,13 @@ export const placeFuturesOrder = async (
       if (entryPrice > 0) {
         orderParams.stopLoss =
           params.side === "Buy"
-            ? (entryPrice * (1 - slPercent)).toFixed(2)
-            : (entryPrice * (1 + slPercent)).toFixed(2);
+            ? (entryPrice * (1 - slPercent)).toFixed(5)
+            : (entryPrice * (1 + slPercent)).toFixed(5);
       } else {
         orderParams.stopLoss =
           params.side === "Buy"
-            ? (markPrice * (1 - slPercent)).toFixed(2)
-            : (markPrice * (1 + slPercent)).toFixed(2);
+            ? (markPrice * (1 - slPercent)).toFixed(5)
+            : (markPrice * (1 + slPercent)).toFixed(5);
       }
     }
 
