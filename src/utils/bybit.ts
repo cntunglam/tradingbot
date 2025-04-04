@@ -343,41 +343,45 @@ const cancelOppositeOrders = async (
   newOrderSide: "Buy" | "Sell"
 ): Promise<void> => {
   try {
-    // Get all open orders for the symbol
+    // Get all positions for the symbol
     const response = await handleApiRequest(
       client.axiosInstance,
       client.apiKey,
       client.apiSecret,
-      "/v5/order/realtime",
+      "/v5/position/list",
       "GET",
       {
         category: "linear",
         symbol: symbol,
-        openOnly: 1, // Only get open orders
+        settleCoin: "USDT",
       }
     );
 
     if (response.retCode !== 0) {
-      throw new Error(response.retMsg || "Failed to fetch open orders");
+      throw new Error(response.retMsg || "Failed to fetch positions");
     }
 
-    // Filter orders with opposite side
-    const oppositeOrders = response.result.list.filter(
-      (order: any) => order.side === (newOrderSide === "Buy" ? "Sell" : "Buy")
+    // Filter positions with opposite side
+    const oppositePositions = response.result.list.filter(
+      (pos: any) => pos.side === (newOrderSide === "Buy" ? "Sell" : "Buy")
     );
 
-    // Cancel all opposite orders
-    for (const order of oppositeOrders) {
+    // Close all opposite positions with market orders
+    for (const position of oppositePositions) {
       await handleApiRequest(
         client.axiosInstance,
         client.apiKey,
         client.apiSecret,
-        "/v5/order/cancel",
+        "/v5/order/create",
         "POST",
         {
           category: "linear",
-          symbol: order.symbol,
-          orderId: order.orderId,
+          symbol: position.symbol,
+          side: newOrderSide === "Buy" ? "Sell" : "Buy",
+          orderType: "Market",
+          qty: position.size,
+          reduceOnly: true,
+          closeOnTrigger: true,
         }
       );
     }
@@ -391,6 +395,7 @@ export const placeFuturesOrder = async (
   client: BybitClient,
   params: FuturesOrderParams
 ) => {
+  await cancelOppositeOrders(client, params.symbol, params.side);
   try {
     // Prepare order parameters
     const orderParams: any = {
@@ -506,8 +511,5 @@ export const placeFuturesOrder = async (
       success: false,
       error: error instanceof Error ? error.message : "Unknown error occurred",
     };
-  } finally {
-    // Cancel existing opposite orders first
-    await cancelOppositeOrders(client, params.symbol, params.side);
   }
 };
