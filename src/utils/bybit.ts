@@ -381,7 +381,6 @@ const cancelOppositeOrders = async (
           orderType: "Market",
           qty: position.size,
           reduceOnly: true,
-          closeOnTrigger: true,
         }
       );
     }
@@ -396,7 +395,6 @@ export const placeFuturesOrder = async (
   params: FuturesOrderParams
 ) => {
   try {
-    await cancelOppositeOrders(client, params.symbol, params.side);
     // Prepare order parameters
     const orderParams: any = {
       category: "linear", // For USDT perpetual futures
@@ -405,6 +403,7 @@ export const placeFuturesOrder = async (
       orderType: params.orderType,
       qty: params.qty,
     };
+    console.log(params.side);
 
     // Get position data for TP/SL calculation
     const positionData = await client.getPositionData({
@@ -415,8 +414,6 @@ export const placeFuturesOrder = async (
       category: "linear",
       symbol: params.symbol,
     });
-    console.log(positionData);
-    console.log(marketData);
     // Add optional parameters if provided
     if (params.price && params.orderType === "Limit") {
       orderParams.price = params.price;
@@ -434,6 +431,8 @@ export const placeFuturesOrder = async (
 
     if (params.reduceOnly !== undefined) {
       orderParams.reduceOnly = params.reduceOnly;
+    } else {
+      params.reduceOnly = true;
     }
 
     if (params.closeOnTrigger !== undefined) {
