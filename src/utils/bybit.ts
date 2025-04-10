@@ -336,7 +336,7 @@ export interface FuturesOrderParams {
  * @param params - Order parameters
  * @returns Promise with the order result
  */
-// Close current position and prepare for new position
+// Cancel current position if new order is on opposite side
 export const cancelOppositeOrders = async (
   client: BybitClient,
   symbol: string,
@@ -365,11 +365,12 @@ export const cancelOppositeOrders = async (
       (pos: any) => pos.symbol === symbol && Math.abs(parseFloat(pos.size)) > 0
     );
 
-    if (!currentPosition) {
-      return { success: true, message: "No existing position to close" };
+    // If no position or position is on same side as new order, no need to cancel
+    if (!currentPosition || currentPosition.side === newOrderSide) {
+      return { success: true, message: "No opposite position to cancel" };
     }
 
-    // Close the current position with a market order
+    // Cancel current position since it's on opposite side
     const closeResponse = await handleApiRequest(
       client.axiosInstance,
       client.apiKey,
@@ -379,7 +380,7 @@ export const cancelOppositeOrders = async (
       {
         category: "linear",
         symbol: symbol,
-        side: currentPosition.side === "Buy" ? "Sell" : "Buy",
+        side: currentPosition.side === "Buy" ? "Sell" : "Buy", // Use opposite of current position side
         orderType: "Market",
         qty: currentPosition.size,
         reduceOnly: true,
@@ -387,15 +388,12 @@ export const cancelOppositeOrders = async (
     );
 
     if (closeResponse.retCode !== 0) {
-      throw new Error(closeResponse.retMsg || "Failed to close position");
+      throw new Error(closeResponse.retMsg || "Failed to cancel position");
     }
-
-    // Add a small delay to ensure the position is closed before new orders
-    await new Promise((resolve) => setTimeout(resolve, 1000));
 
     return {
       success: true,
-      message: `Successfully closed ${currentPosition.side} position of ${currentPosition.size} ${symbol}`,
+      message: `Cancelled opposite ${currentPosition.side} position of ${currentPosition.size} ${symbol}`,
     };
   } catch (error) {
     console.error("Error in cancelOppositeOrders:", error);
