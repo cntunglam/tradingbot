@@ -395,8 +395,8 @@ export const placeFuturesOrder = async (
   client: BybitClient,
   params: FuturesOrderParams
 ) => {
-  await cancelOppositeOrders(client, params.symbol, params.side);
   try {
+    await cancelOppositeOrders(client, params.symbol, params.side);
     // Prepare order parameters
     const orderParams: any = {
       category: "linear", // For USDT perpetual futures
