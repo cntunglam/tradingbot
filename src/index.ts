@@ -4,6 +4,8 @@ import {
   placeFuturesOrder,
   parseOrderString,
   FuturesOrderParams,
+  handleApiRequest,
+  cancelOppositeOrders,
 } from "./utils/bybit";
 import "dotenv/config";
 const app = express();
@@ -145,7 +147,26 @@ app.post("/webhook", (req: Request, res: Response) => {
       // Initialize Bybit client
       const client = initBybitClient(BYBIT_API_KEY, BYBIT_API_SECRET, BASE_URL);
 
-      // Place the order
+      // First try to close any existing position
+      console.log("Checking for existing positions to close...");
+      const cancelRes = await cancelOppositeOrders(
+        client,
+        orderParams.symbol,
+        orderParams.side
+      );
+
+      if (!cancelRes.success) {
+        console.error("Failed to close existing position:", cancelRes.message);
+        return res.status(500).json({
+          status: "error",
+          message: "Failed to close existing position",
+          error: cancelRes.message,
+        });
+      }
+
+      console.log(cancelRes.message);
+
+      // Place the new order
       console.log(
         `Placing ${orderParams.orderType} order for ${orderParams.symbol}...`
       );

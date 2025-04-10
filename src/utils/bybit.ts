@@ -130,7 +130,7 @@ const generateSignature = (
 const recvWindow = "5000";
 
 // Generic API request handler
-const handleApiRequest = async (
+export const handleApiRequest = async (
   axiosInstance: AxiosInstance,
   apiKey: string,
   apiSecret: string,
@@ -336,14 +336,14 @@ export interface FuturesOrderParams {
  * @param params - Order parameters
  * @returns Promise with the order result
  */
-// Cancel opposite side orders for same symbol
-const cancelOppositeOrders = async (
+// Close current position and prepare for new position
+export const cancelOppositeOrders = async (
   client: BybitClient,
   symbol: string,
   newOrderSide: "Buy" | "Sell"
-): Promise<void> => {
+): Promise<{ success: boolean; message: string }> => {
   try {
-    // Get all positions for the symbol
+    // Get current position for the symbol
     const response = await handleApiRequest(
       client.axiosInstance,
       client.apiKey,
@@ -353,7 +353,6 @@ const cancelOppositeOrders = async (
       {
         category: "linear",
         symbol: symbol,
-        settleCoin: "USDT",
       }
     );
 
@@ -361,32 +360,50 @@ const cancelOppositeOrders = async (
       throw new Error(response.retMsg || "Failed to fetch positions");
     }
 
-    // Filter positions with opposite side
-    const oppositePositions = response.result.list.filter(
-      (pos: any) => pos.side === (newOrderSide === "Buy" ? "Sell" : "Buy")
+    // Find existing position
+    const currentPosition = response.result.list.find(
+      (pos: any) => pos.symbol === symbol && Math.abs(parseFloat(pos.size)) > 0
     );
 
-    // Close all opposite positions with market orders
-    for (const position of oppositePositions) {
-      await handleApiRequest(
-        client.axiosInstance,
-        client.apiKey,
-        client.apiSecret,
-        "/v5/order/create",
-        "POST",
-        {
-          category: "linear",
-          symbol: position.symbol,
-          side: newOrderSide === "Buy" ? "Sell" : "Buy",
-          orderType: "Market",
-          qty: position.size,
-          reduceOnly: true,
-        }
-      );
+    if (!currentPosition) {
+      return { success: true, message: "No existing position to close" };
     }
+
+    // Close the current position with a market order
+    const closeResponse = await handleApiRequest(
+      client.axiosInstance,
+      client.apiKey,
+      client.apiSecret,
+      "/v5/order/create",
+      "POST",
+      {
+        category: "linear",
+        symbol: symbol,
+        side: currentPosition.side === "Buy" ? "Sell" : "Buy",
+        orderType: "Market",
+        qty: currentPosition.size,
+        reduceOnly: true,
+      }
+    );
+
+    if (closeResponse.retCode !== 0) {
+      throw new Error(closeResponse.retMsg || "Failed to close position");
+    }
+
+    // Add a small delay to ensure the position is closed before new orders
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+
+    return {
+      success: true,
+      message: `Successfully closed ${currentPosition.side} position of ${currentPosition.size} ${symbol}`,
+    };
   } catch (error) {
-    console.error("Error canceling opposite orders:", error);
-    throw error;
+    console.error("Error in cancelOppositeOrders:", error);
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "Unknown error occurred",
+    };
   }
 };
 
