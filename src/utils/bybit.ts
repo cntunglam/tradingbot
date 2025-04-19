@@ -1,35 +1,10 @@
 import axios, { AxiosInstance } from "axios";
 import crypto from "crypto";
-
-// Interfaces for Bybit client configuration
-export interface BybitClientConfig {
-  apiKey: string;
-  apiSecret: string;
-  baseUrl: string;
-  name: string;
-}
-
-// Interface for the Bybit client
-export interface BybitClient {
-  axiosInstance: AxiosInstance;
-  apiKey: string;
-  apiSecret: string;
-  name: string;
-  submitOrder: (params: any) => Promise<any>;
-  getPositionData: (params: { symbol: string; category: string }) => Promise<{
-    entryPrice: string;
-    markPrice: string;
-    size: string;
-    leverage: string;
-  } | null>;
-  getMarketData: (params: { symbol: string; category: string }) => Promise<{
-    lastPrice: string;
-    highPrice: string;
-    lowPrice: string;
-    volume: string;
-    fundingRate: string;
-  } | null>;
-}
+import {
+  BybitClient,
+  BybitClientConfig,
+  FuturesOrderParams,
+} from "../data/bybitConfigs";
 
 // Initialize Bybit API client
 export const initBybitClient = (config: BybitClientConfig): BybitClient => {
@@ -110,7 +85,6 @@ export const initBybitClient = (config: BybitClientConfig): BybitClient => {
   };
 };
 
-// Generate signature for Bybit API authentication
 // Helper to create properly sorted query string
 const getQueryString = (params: any): string => {
   return Object.keys(params)
@@ -120,7 +94,7 @@ const getQueryString = (params: any): string => {
     )
     .join("&");
 };
-
+// Generate signature for Bybit API authentication
 const generateSignature = (
   apiKey: string,
   apiSecret: string,
@@ -318,24 +292,6 @@ export const parseOrderString = (csvString: string): FuturesOrderParams => {
   return orderParams;
 };
 
-// Interface for futures order parameters
-export interface FuturesOrderParams {
-  symbol: string; // Trading pair symbol (e.g., 'BTCUSDT')
-  side: "Buy" | "Sell"; // Order side
-  orderType: "Market" | "Limit"; // Order type
-  qty: string; // Order quantity
-  price?: string; // Order price (required for Limit orders)
-  timeInForce?: string; // Time in force (e.g., 'GTC', 'IOC', 'FOK')
-  positionIdx?: number; // Position index (0: one-way mode, 1: hedge mode buy side, 2: hedge mode sell side)
-  reduceOnly?: boolean; // Whether to close position only
-  closeOnTrigger?: boolean; // Whether to close position on trigger
-  takeProfit?: string; // Take profit price
-  stopLoss?: string; // Stop loss price
-  tpTriggerBy?: string; // Take profit trigger price type
-  slTriggerBy?: string; // Stop loss trigger price type
-  orderLinkId?: string; // Custom order ID
-}
-
 /**
  * Place a futures order on Bybit
  *
@@ -390,7 +346,7 @@ export const cancelOppositeOrders = async (
         side: currentPosition.side === "Buy" ? "Sell" : "Buy", // Use opposite of current position side
         orderType: "Market",
         qty: currentPosition.size,
-        reduceOnly: true,
+        reduceOnly: false,
       }
     );
 

@@ -3,11 +3,10 @@ import {
   initBybitClient,
   placeFuturesOrder,
   parseOrderString,
-  FuturesOrderParams,
   cancelOppositeOrders,
 } from "./utils/bybit";
 import "dotenv/config";
-import { bybitConfigs } from "./data/bybitConfigs";
+import { bybitConfigs, FuturesOrderParams } from "./data/bybitConfigs";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
