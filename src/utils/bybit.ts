@@ -1,11 +1,20 @@
 import axios, { AxiosInstance } from "axios";
 import crypto from "crypto";
 
+// Interfaces for Bybit client configuration
+export interface BybitClientConfig {
+  apiKey: string;
+  apiSecret: string;
+  baseUrl: string;
+  name: string;
+}
+
 // Interface for the Bybit client
 export interface BybitClient {
   axiosInstance: AxiosInstance;
   apiKey: string;
   apiSecret: string;
+  name: string;
   submitOrder: (params: any) => Promise<any>;
   getPositionData: (params: { symbol: string; category: string }) => Promise<{
     entryPrice: string;
@@ -23,11 +32,8 @@ export interface BybitClient {
 }
 
 // Initialize Bybit API client
-export const initBybitClient = (
-  apiKey: string,
-  apiSecret: string,
-  baseUrl: string
-): BybitClient => {
+export const initBybitClient = (config: BybitClientConfig): BybitClient => {
+  const { apiKey, apiSecret, baseUrl, name } = config;
   // Create axios instance for Bybit testnet
   const axiosInstance = axios.create({
     baseURL: baseUrl,
@@ -42,6 +48,7 @@ export const initBybitClient = (
     axiosInstance,
     apiKey,
     apiSecret,
+    name,
     submitOrder: async (params: any) => {
       return await submitOrder(axiosInstance, apiKey, apiSecret, params);
     },

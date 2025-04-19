@@ -4,10 +4,10 @@ import {
   placeFuturesOrder,
   parseOrderString,
   FuturesOrderParams,
-  handleApiRequest,
   cancelOppositeOrders,
 } from "./utils/bybit";
 import "dotenv/config";
+import { bybitConfigs } from "./data/bybitConfigs";
 const app = express();
 const PORT = process.env.PORT || 3001;
 
@@ -15,34 +15,33 @@ const PORT = process.env.PORT || 3001;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.text());
-// Environment variables for API keys (should be set in production environment)
-const BYBIT_API_KEY = process.env.BYBIT_API_KEY;
-const BYBIT_API_SECRET = process.env.BYBIT_API_SECRET;
-const BASE_URL = process.env.BASE_URL;
+// Environment variables for multiple Bybit clients
 app.post("/webhook", (req: Request, res: Response) => {
   console.log("Received webhook payload:", req.body);
 
   // Process the webhook and place a Bybit futures order
   (async () => {
     try {
-      if (!BASE_URL) {
-        console.error("BASE URL not configured");
+      // Filter out configs with null values and get valid configs
+      const validConfigs = bybitConfigs.filter(
+        (config) =>
+          config.apiKey !== null &&
+          config.apiSecret !== null &&
+          config.baseUrl !== null &&
+          config.apiKey !== "" &&
+          config.apiSecret !== "" &&
+          config.baseUrl !== ""
+      );
+
+      if (validConfigs.length === 0) {
+        console.error("No valid API configurations found");
         return res.status(500).json({
           success: false,
-          error: "BASE URL not configured",
+          error: "No valid API configurations available",
         });
       }
-      // Check if API keys are configured
-      if (!BYBIT_API_KEY || !BYBIT_API_SECRET) {
-        console.error(
-          "API keys not configured. Please set BYBIT_API_KEY and BYBIT_API_SECRET environment variables."
-        );
-        return res.status(500).json({
-          success: false,
-          error:
-            "API keys not configured. Please set BYBIT_API_KEY and BYBIT_API_SECRET environment variables.",
-        });
-      }
+
+      console.log(`Found ${validConfigs.length} valid API configurations`);
 
       let orderParams: FuturesOrderParams;
 
@@ -144,48 +143,77 @@ app.post("/webhook", (req: Request, res: Response) => {
         });
       }
 
-      // Initialize Bybit client
-      const client = initBybitClient(BYBIT_API_KEY, BYBIT_API_SECRET, BASE_URL);
+      // Initialize only valid Bybit clients
+      const clients = validConfigs.map((config) => initBybitClient(config));
 
-      // First try to close any existing position
-      console.log("Checking for existing positions to close...");
-      const cancelRes = await cancelOppositeOrders(
-        client,
-        orderParams.symbol,
-        orderParams.side
-      );
+      // Process orders in parallel for all clients
+      const orderPromises = clients.map(async (client) => {
+        try {
+          // First try to close any existing position
+          console.log(
+            `[${client.name}] Checking for existing positions to close...`
+          );
+          const cancelRes = await cancelOppositeOrders(
+            client,
+            orderParams.symbol,
+            orderParams.side
+          );
 
-      if (!cancelRes.success) {
-        console.error("Failed to close existing position:", cancelRes.message);
-        return res.status(500).json({
-          status: "error",
-          message: "Failed to close existing position",
-          error: cancelRes.message,
-        });
-      }
+          if (!cancelRes.success) {
+            console.error(
+              `[${client.name}] Failed to close existing position:`,
+              cancelRes.message
+            );
+            return {
+              client: client.name,
+              success: false,
+              error: cancelRes.message,
+            };
+          }
 
-      console.log(cancelRes.message);
+          console.log(`[${client.name}] ${cancelRes.message}`);
 
-      // Place the new order
-      console.log(
-        `Placing ${orderParams.orderType} order for ${orderParams.symbol}...`
-      );
-      const orderResult = await placeFuturesOrder(client, orderParams);
+          // Place the new order
+          console.log(
+            `[${client.name}] Placing ${orderParams.orderType} order for ${orderParams.symbol}...`
+          );
+          const orderResult = await placeFuturesOrder(client, orderParams);
 
-      // Log and return the result
-      console.log("Order result:", orderResult);
+          // Log and return the result
+          console.log(`[${client.name}] Order result:`, orderResult);
 
-      if (orderResult.success) {
+          return {
+            client: client.name,
+            ...orderResult,
+          };
+        } catch (error) {
+          console.error(`[${client.name}] Error processing order:`, error);
+          return {
+            client: client.name,
+            success: false,
+            error:
+              error instanceof Error ? error.message : "Unknown error occurred",
+          };
+        }
+      });
+
+      // Wait for all orders to complete
+      const results = await Promise.all(orderPromises);
+
+      // Check if any orders were successful
+      const anySuccess = results.some((result) => result.success);
+
+      if (anySuccess) {
         return res.status(200).json({
           status: "success",
-          message: "Webhook received and order placed successfully",
-          orderResult,
+          message: "Webhook processed with some successful orders",
+          results,
         });
       } else {
         return res.status(400).json({
           status: "error",
-          message: "Webhook received but order placement failed",
-          orderResult,
+          message: "All orders failed",
+          results,
         });
       }
     } catch (error) {
